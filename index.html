@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>iPhone 16 Pro Max - AirDrop P2P</title>
+  
+  <!-- Ionicons CDN -->
+  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+  
+  <!-- PeerJS CDN pour la connexion P2P WebRTC -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <style>
+    body {
+      background: white;
+      align-items: center;
+      display: flex;
+      height: 100vh;
+      justify-content: center;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    
+    .iphone {
+      position: relative;
+      background: black;
+      width: 300px;
+      height: 625px;
+      border: solid 4px #3C3C3C;
+      border-radius: 55px;
+      padding: 4px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+    
+    .screen {
+      transition: 0.3s;
+      position: relative;
+      background: url("https://cdn.osxdaily.com/wp-content/uploads/2025/07/iOS-26-Wallpaper-Sky-Light.jpg") center/cover;
+      width: 100%;
+      height: 100%;
+      border-radius: 50px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 60px;
+      box-sizing: border-box;
+    }
+    
+    /* Dynamic Island avec animations */
+    .dynamicIsland {
+      background: black;
+      width: 110px;
+      height: 36.67px;
+      border-radius: 55px;
+      position: absolute;
+      top: 14.33px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      box-sizing: border-box;
+      color: white;
+      font-size: 11px;
+      overflow: hidden;
+    }
+
+    .dynamicIsland.expanded {
+      width: 220px;
+      height: 38px;
+      border-radius: 25px;
+      background: #000000;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+
+    .island-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .dynamicIsland.expanded .island-content {
+      opacity: 1;
+    }
+
+    /* Mon ID Card */
+    .my-id-card {
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      padding: 10px 14px;
+      border-radius: 18px;
+      color: white;
+      text-align: center;
+      width: 80%;
+      margin-bottom: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    .my-id-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.8;
+      margin-bottom: 3px;
+    }
+
+    .my-id-code {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+
+    /* Styles AirDrop */
+    .airdrop-menu {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 85%;
+    }
+
+    .airdrop-trigger {
+      color: white;
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
+      padding: 12px 16px;
+      border-radius: 16px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      transition: 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .airdrop-trigger:active {
+      transform: scale(0.97);
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .airdrop-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(16px);
+      border-radius: 50px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      padding: 20px;
+      text-align: center;
+      z-index: 15;
+      opacity: 0;
+      pointer-events: none;
+      transition: 0.3s ease;
+    }
+
+    .airdrop-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Liste des appareils détectés autour de moi */
+    .airdrop-devices-grid {
+      display: flex;
+      gap: 15px;
+      margin: 15px 0;
+      justify-content: center;
+      flex-wrap: wrap;
+      max-height: 180px;
+      overflow-y: auto;
+      width: 100%;
+    }
+
+    .airdrop-device-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .airdrop-device-item:hover {
+      transform: scale(1.08);
+    }
+
+    .airdrop-device-avatar {
+      background: rgba(255, 255, 255, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      width: 58px;
+      height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      color: #007aff;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+
+    .airdrop-device-name {
+      font-size: 11px;
+      margin-top: 6px;
+      color: #eee;
+      max-width: 75px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .radar-search {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 20px 0;
+      color: #aaa;
+      font-size: 12px;
+    }
+
+    .radar-icon {
+      font-size: 32px;
+      color: #007aff;
+      margin-bottom: 8px;
+      animation: pulse 1.5s infinite alternate;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.6; }
+      100% { transform: scale(1.1); opacity: 1; }
+    }
+
+    .airdrop-btn {
+      background: #007aff;
+      border: none;
+      color: white;
+      padding: 9px 18px;
+      border-radius: 20px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .airdrop-btn.decline {
+      background: #ff3b30;
+    }
+
+    .spin {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="iphone">
+    <div class="screen">
+      
+      <!-- Dynamic Island -->
+      <div class="dynamicIsland" id="dynamicIsland">
+        <div class="island-content" id="islandContent"></div>
+      </div>
+
+      <!-- Badge Mon ID -->
+      <div class="my-id-card">
+        <div class="my-id-title"><ion-icon name="wifi-outline"></ion-icon> Mon Appareil</div>
+        <div class="my-id-code" id="myDeviceName">Recherche du réseau...</div>
+      </div>
+
+      <!-- Menu Principal -->
+      <div class="airdrop-menu">
+        <div class="airdrop-trigger" onclick="document.getElementById('fileInput').click()">
+          <ion-icon name="share-outline" style="font-size: 18px;"></ion-icon> Envoyez un fichier
+        </div>
+      </div>
+
+      <input type="file" id="fileInput" style="display: none;" onchange="handleFileSelected(event)">
+      
+      <!-- Modal d'envoi AirDrop avec détection automatique "Autour de moi" -->
+      <div class="airdrop-overlay" id="airdropSendModal">
+        <h3 style="margin: 0 0 5px 0;">AirDrop</h3>
+        <p id="selectedFileName" style="font-size: 12px; color: #aaa; margin: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></p>
+        
+        <p style="font-size: 12px; color: #ddd; margin: 15px 0 5px 0;">Appareils détectés autour de vous :</p>
+        
+        <!-- Liste dynamique des personnes autour -->
+        <div class="airdrop-devices-grid" id="nearbyDevicesContainer">
+          <div class="radar-search">
+            <ion-icon name="radio-outline" class="radar-icon"></ion-icon>
+            <span>Recherche d'appareils...</span>
+          </div>
+        </div>
+
+        <button class="airdrop-btn decline" style="margin-top: 10px;" onclick="closeSendModal()">Annuler</button>
+      </div>
+
+      <!-- Modal de Réception P2P -->
+      <div class="airdrop-overlay" id="airdropReceiveModal">
+        <h3 style="margin: 0 0 5px 0;">AirDrop</h3>
+        <p style="font-size: 13px; color: #aaa; margin: 0;"><strong id="senderName">Quelqu'un</strong> souhaite vous partager :</p>
+        <p id="incomingFileName" style="font-size: 14px; color: #fff; font-weight: 600; margin: 10px 0; word-break: break-all;"></p>
+        
+        <div style="margin: 15px 0; font-size: 45px; color: #007aff;">
+          <ion-icon name="document-text-outline"></ion-icon>
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+          <button class="airdrop-btn decline" onclick="rejectIncomingFile()"><ion-icon name="close-outline"></ion-icon> Refuser</button>
+          <button class="airdrop-btn" onclick="acceptIncomingFile()"><ion-icon name="download-outline"></ion-icon> Accepter</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let peer = null;
+    let myDeviceName = "iPhone-" + Math.floor(1000 + Math.random() * 9000);
+    let selectedFile = null;
+    let pendingReceivedData = null;
+    let activePeers = new Set();
+    let peerConnections = {};
+    let incomingTransfer = null;
+
+    // 🔊 Son AirDrop via Web Audio API (aucun fichier externe requis)
+    function playAirDropSound() {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        
+        // Note 1
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(880, ctx.currentTime); // La5
+        gain1.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(ctx.currentTime);
+        osc1.stop(ctx.currentTime + 0.25);
+
+        // Note 2 (Carillon iOS)
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1); // Mi6
+        gain2.gain.setValueAtTime(0.2, ctx.currentTime + 0.1);
+        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(ctx.currentTime + 0.1);
+        osc2.stop(ctx.currentTime + 0.5);
+      } catch (e) {
+        console.log("Audio non supporté:", e);
+      }
+    }
+
+    // 𓓮 Vibration Haptic Feedback
+    function triggerHaptics() {
+      if ('vibrate' in navigator) {
+        navigator.vibrate([20, 50, 20]);
+      }
+    }
+
+    // 🏝️ Dynamic Island Animations
+    function setDynamicIslandSending(fileName) {
+      const island = document.getElementById('dynamicIsland');
+      const content = document.getElementById('islandContent');
+      
+      content.innerHTML = `
+        <span style="display:flex; align-items:center; gap:5px; color:#007aff;">
+          <ion-icon name="sync-outline" class="spin" style="font-size:14px;"></ion-icon> AirDrop
+        </span>
+        <span style="color:#aaa; font-size:10px; max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          Transfert...
+        </span>
+      `;
+      island.classList.add('expanded');
+    }
+
+    function setDynamicIslandSuccess(message) {
+      const island = document.getElementById('dynamicIsland');
+      const content = document.getElementById('islandContent');
+      
+      content.innerHTML = `
+        <span style="display:flex; align-items:center; gap:5px; color:#34c759; font-weight:600;">
+          <ion-icon name="checkmark-circle" style="font-size:15px;"></ion-icon> AirDrop
+        </span>
+        <span style="color:#fff; font-size:10px;">${message}</span>
+      `;
+      island.classList.add('expanded');
+
+      setTimeout(() => {
+        island.classList.remove('expanded');
+      }, 3000);
+    }
+
+    // 🛰️ Système du Salon "Autour de moi" via PeerJS
+    function initPeerDiscovery() {
+      peer = new Peer(myDeviceName);
+
+      peer.on('open', (id) => {
+        document.getElementById('myDeviceName').innerText = id;
+        scanNearbyPeers();
+      });
+
+      peer.on('connection', (conn) => {
+        setupConnection(conn);
+      });
+
+      peer.on('error', (err) => {
+        console.error("PeerJS Error:", err);
+      });
+    }
+
+    function setupConnection(conn) {
+      peerConnections[conn.peer] = conn;
+
+      conn.on('data', (data) => {
+        if (data.type === 'PING') {
+          activePeers.add(data.sender);
+          updateNearbyUI();
+        } else if (data.type === 'FILE_HEADER') {
+          // Début d'un transfert par morceaux (Chunking)
+          incomingTransfer = {
+            name: data.name,
+            size: data.size,
+            type: data.mimeType,
+            sender: data.sender || conn.peer,
+            chunks: [],
+            receivedBytes: 0
+          };
+          setDynamicIslandSending(data.name);
+        } else if (data instanceof ArrayBuffer || data.byteLength !== undefined) {
+          // Réception d'un morceau binaire
+          if (!incomingTransfer) return;
+
+          incomingTransfer.chunks.push(data);
+          incomingTransfer.receivedBytes += data.byteLength;
+
+          // Lorsque tous les morceaux sont assemblés
+          if (incomingTransfer.receivedBytes >= incomingTransfer.size) {
+            pendingReceivedData = incomingTransfer;
+
+            document.getElementById('senderName').innerText = incomingTransfer.sender;
+            document.getElementById('incomingFileName').innerText = incomingTransfer.name;
+
+            playAirDropSound();
+            triggerHaptics();
+            document.getElementById('airdropReceiveModal').classList.add('active');
+            incomingTransfer = null;
+          }
+        }
+      });
+
+      conn.on('close', () => {
+        activePeers.delete(conn.peer);
+        updateNearbyUI();
+      });
+    }
+
+    // Recherche automatique d'appareils à proximité
+    function scanNearbyPeers() {
+      const channel = new BroadcastChannel('iphone_airdrop_room');
+      
+      channel.postMessage({ type: 'ANNOUNCE', id: myDeviceName });
+
+      channel.onmessage = (event) => {
+        if (event.data.type === 'ANNOUNCE' && event.data.id !== myDeviceName) {
+          activePeers.add(event.data.id);
+          updateNearbyUI();
+          channel.postMessage({ type: 'ANNOUNCE_REPLY', id: myDeviceName });
+        } else if (event.data.type === 'ANNOUNCE_REPLY' && event.data.id !== myDeviceName) {
+          activePeers.add(event.data.id);
+          updateNearbyUI();
+        }
+      };
+    }
+
+    // Mise à jour de la grille des personnes autour de moi
+    function updateNearbyUI() {
+      const container = document.getElementById('nearbyDevicesContainer');
+      
+      if (activePeers.size === 0) {
+        container.innerHTML = `
+          <div class="radar-search">
+            <ion-icon name="radio-outline" class="radar-icon"></ion-icon>
+            <span>Recherche d'appareils...</span>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = '';
+      activePeers.forEach((peerId) => {
+        const item = document.createElement('div');
+        item.className = 'airdrop-device-item';
+        item.onclick = () => sendToFile(peerId);
+        item.innerHTML = `
+          <div class="airdrop-device-avatar">
+            <ion-icon name="phone-portrait-outline"></ion-icon>
+          </div>
+          <span class="airdrop-device-name">${peerId}</span>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    initPeerDiscovery();
+
+    // Sélection de fichier
+    function handleFileSelected(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      selectedFile = file;
+      document.getElementById('selectedFileName').innerText = `Fichier: ${file.name}`;
+      document.getElementById('airdropSendModal').classList.add('active');
+    }
+
+    function closeSendModal() {
+      document.getElementById('airdropSendModal').classList.remove('active');
+      document.getElementById('fileInput').value = '';
+      selectedFile = null;
+    }
+
+    // Envoi ultra-rapide par morceaux (Chunking) et contrôle de flux (BufferedAmount)
+    async function sendToFile(targetPeerId) {
+      if (!selectedFile) return;
+
+      const fileToSend = selectedFile;
+      closeSendModal();
+      setDynamicIslandSending(fileToSend.name);
+
+      const conn = peer.connect(targetPeerId);
+
+      conn.on('open', async () => {
+        // 1. Envoi de l'en-tête du fichier
+        conn.send({
+          type: 'FILE_HEADER',
+          name: fileToSend.name,
+          size: fileToSend.size,
+          mimeType: fileToSend.type,
+          sender: myDeviceName
+        });
+
+        const CHUNK_SIZE = 64 * 1024; // Morceaux de 64 Ko
+        let offset = 0;
+        const dataChannel = conn.dataChannel;
+        const maxBufferThreshold = 256 * 1024; // Seuil de pause (256 Ko en tampon)
+
+        // 2. Envoi séquentiel en binaire direct ArrayBuffer
+        while (offset < fileToSend.size) {
+          // Contrôle de flux : si le canal est surchargé, on attend que le réseau dépile
+          if (dataChannel && dataChannel.bufferedAmount > maxBufferThreshold) {
+            await new Promise((resolve) => {
+              const checkBuffer = () => {
+                if (!dataChannel || dataChannel.bufferedAmount <= maxBufferThreshold) {
+                  resolve();
+                } else {
+                  setTimeout(checkBuffer, 10);
+                }
+              };
+              checkBuffer();
+            });
+          }
+
+          const slice = fileToSend.slice(offset, offset + CHUNK_SIZE);
+          const buffer = await slice.arrayBuffer();
+          conn.send(buffer);
+          offset += slice.size;
+        }
+
+        setDynamicIslandSuccess("Envoyé ! ✅");
+      });
+
+      conn.on('error', () => {
+        setDynamicIslandSuccess("Échec ❌");
+      });
+    }
+
+    // Réception et Assemblage des morceaux en Blob
+    function acceptIncomingFile() {
+      if (!pendingReceivedData) return;
+
+      const blob = new Blob(pendingReceivedData.chunks, { type: pendingReceivedData.type || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = pendingReceivedData.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setDynamicIslandSuccess("Reçu ! ✅");
+      rejectIncomingFile();
+    }
+
+    function rejectIncomingFile() {
+      const modal = document.getElementById('airdropReceiveModal');
+      modal.classList.remove('active');
+      pendingReceivedData = null;
+    }
+  </script>
+</body>
+</html>
